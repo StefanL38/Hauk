@@ -111,6 +111,21 @@ public final class LocationPushService extends Service {
         Log.d("Pusher %s was given extras stopTask=%s, share=%s, parentHandler=%s, handler=%s", this, stopTask, this.share, parentHandler, this.handler); //NON-NLS
 
         try {
+            // PATCH (Stefan, 06.11.2026, siehe GitHub-Issue #242 bei bilde2910/Hauk): Wird dieser
+            // Service von Androids eigenem Crash-Recovery-Mechanismus automatisch neu gestartet
+            // (nachdem der Prozess an anderer Stelle abgestuerzt ist), uebergibt Android einen
+            // leeren Intent OHNE die urspruenglichen Extras - "share" waere dann null, und
+            // "this.share.getSession()" wenige Zeilen weiter unten wuerde mit einer
+            // NullPointerException abbrechen. Diese Ausnahme wurde zwar schon vom catch-Block
+            // unten aufgefangen, aber nur protokolliert, nicht verhindert - der Service blieb in
+            // diesem Fall ein funktionsloser, "lautloser" Dienst ohne jede Standortmeldung. Hier
+            // jetzt ein expliziter, fruehzeitiger Abbruch mit klarer Fehlermeldung statt eines
+            // unerwarteten Abbruchs mehrere Zeilen weiter unten.
+            if (this.share == null) {
+                Log.e("Location push service %s was (re-)started without a valid share in its extras (share=null) - vermutlich Androids eigener Service-Neustart nach einem Absturz ohne Original-Extras. Breche kontrolliert ab, statt mit NullPointerException zu scheitern.", this); //NON-NLS
+                stopSelf();
+                return START_NOT_STICKY;
+            }
             // Even though we previously requested location permission, we still have to check for
             // it when we actually use the location API.
             if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
@@ -148,12 +163,30 @@ public final class LocationPushService extends Service {
             Log.i("Service %s destroyed; removing updates from coarse location provider", this); //NON-NLS
             this.locMan.removeUpdates(this.listenCoarse);
         }
-        Log.i("Service %s destroyed; removing updates from fine location provider", this); //NON-NLS
-        this.listenFine.onStopped();
-        this.locMan.removeUpdates(this.listenFine);
+        // PATCH (Stefan, 06.11.2026, siehe GitHub-Issue #242 bei bilde2910/Hauk): "listenFine"
+        // war hier bisher UNGEPRUEFT auf null - trat onDestroy() in einem Zustand auf, in dem
+        // listenFine nie gesetzt wurde (z.B. weil die Standortberechtigung fehlte, oder weil
+        // der Service waehrend eines Neustarts abgebrochen wurde), fuehrte
+        // "this.listenFine.onStopped()" zu einer NullPointerException, die den GESAMTEN
+        // App-Prozess abstuerzen liess (onDestroy() hat keinen umgebenden try/catch-Block).
+        // Androids eigene Crash-Recovery startete den Service danach automatisch neu, aber ohne
+        // die urspruenglichen Intent-Extras - was wiederum in eine zweite, andere
+        // NullPointerException in onStartCommand() lief (siehe Patch dort). Mit dieser
+        // Null-Pruefung wird dieser Absturz-Kreislauf an der Wurzel verhindert.
+        if (this.listenFine != null) {
+            Log.i("Service %s destroyed; removing updates from fine location provider", this); //NON-NLS
+            this.listenFine.onStopped();
+            this.locMan.removeUpdates(this.listenFine);
+        } else {
+            Log.w("Service %s destroyed, but listenFine was already null - skipping fine location provider cleanup (patched, see Hauk-Watchdog project / Hauk GitHub issue #242)", this); //NON-NLS
+        }
 
-        Log.i("Removing callbacks from handler %s", this.handler); //NON-NLS
-        this.handler.removeCallbacksAndMessages(null);
+        if (this.handler != null) {
+            Log.i("Removing callbacks from handler %s", this.handler); //NON-NLS
+            this.handler.removeCallbacksAndMessages(null);
+        } else {
+            Log.w("Service %s destroyed, but handler was already null - skipping removeCallbacksAndMessages (patched, see Hauk-Watchdog project / Hauk GitHub issue #242)", this); //NON-NLS
+        }
         this.gnssActiveTask = new MultiTargetGNSSHandlerProxy();
 
         Log.i("Stopping foreground service"); //NON-NLS

@@ -186,15 +186,34 @@ public abstract class SessionManager {
     public final void resumeShares(ResumePrompt prompt) {
         // Check if the location push service is already running. This will happen if the main UI
         // activity is killed/stopped, but the app itself and the pushing service keeps running in
-        // the background. If this happens, the push service should be silently restarted to ensure
-        // it behaves properly with new instances of GNSSActiveHandler and StopSharingTask that will
-        // be created and attached when creating a new SessionManager in MainActivity. There is
-        // probably a cleaner way to do this.
+        // the background.
+        //
+        // PATCH (Stefan, 06.11.2026, siehe GitHub-Issue #242 bei bilde2910/Hauk sowie Projekt
+        // Hauk_Watchdog): Der urspruengliche Code hat den bereits laufenden LocationPushService
+        // an dieser Stelle UNBEDINGT gestoppt und per ServiceRelauncher neu gestartet, sobald
+        // resumeShares() aufgerufen wurde - das passiert bei jedem ganz normalen Android-
+        // Lifecycle-Ereignis, zum Beispiel wenn die MainActivity nach "Bildschirm aus" im
+        // Hintergrund neu erzeugt wird. Auf targetSdk 36 / Android 14+ verlangt das
+        // Betriebssystem fuer einen Foreground-Service vom Typ "location", dass die App sich in
+        // einem als "eligible" erkannten Zustand befindet, wenn der Service neu gestartet wird -
+        // dieser Neustart-Versuch schlaegt dann mit einer SecurityException bzw. an anderer
+        // Stelle mit einer NullPointerException fehl, OHNE dass der Nutzer irgendeine
+        // Fehlermeldung sieht. In einem konkret beobachteten Fall blieb die Standortfreigabe
+        // dadurch ueber 2 Stunden 35 Minuten lang komplett und lautlos stehen, ausgeloest durch
+        // nichts weiter als das Druecken des Bildschirm-aus-Knopfes.
+        //
+        // Der bereits laufende Service funktioniert an dieser Stelle nachweislich noch korrekt
+        // (er sendet weiterhin Standortdaten) - ein Neustart ist nicht notwendig und richtet nur
+        // Schaden an. Wir lassen den laufenden Service deshalb unberuehrt, statt ihn zu stoppen
+        // und neu zu starten. Bekannter Kompromiss dieser Korrektur: Die GNSSActiveHandler- und
+        // StopSharingTask-Instanzen der neuen MainActivity werden dadurch nicht mehr automatisch
+        // an den weiterlaufenden Service gebunden - UI-Elemente wie die Genauigkeitsanzeige oder
+        // der "Stop sharing"-Button koennen deshalb bis zum naechsten eigenstaendigen Stopp/Start
+        // einer Freigabe veraltete Zustaende zeigen. Das ist bewusst in Kauf genommen, weil
+        // zuverlaessige Hintergrund-Standortuebertragung fuer dieses Projekt wichtiger ist als
+        // eine jederzeit aktuelle UI.
         if (pusher != null) {
-            Log.d("Pusher is non-null (%s), stopping and nulling it and calling service relauncher", pusher); //NON-NLS
-            this.ctx.stopService(pusher);
-            pusher = null;
-            this.resumable.tryResumeShare(new ServiceRelauncher(this, this.resumable));
+            Log.d("Pusher is non-null (%s); service is already running in the background, leaving it untouched instead of stopping/relaunching it (patched, see Hauk-Watchdog project / Hauk GitHub issue #242)", pusher); //NON-NLS
         } else {
             Log.d("Pusher is null, calling resumption prompter"); //NON-NLS
             this.resumable.tryResumeShare(new AutoResumptionPrompter(this, this.resumable, prompt));
