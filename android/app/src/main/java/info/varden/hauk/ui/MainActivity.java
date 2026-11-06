@@ -5,8 +5,13 @@ import android.annotation.SuppressLint;
 import android.app.ProgressDialog;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.graphics.Paint;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -53,6 +58,7 @@ import info.varden.hauk.ui.listener.InitiateAdoptionClickListener;
 import info.varden.hauk.ui.listener.SelectionModeChangedListener;
 import info.varden.hauk.utils.DeprecationMigrator;
 import info.varden.hauk.utils.Log;
+import info.varden.hauk.utils.PatchStatus;
 import info.varden.hauk.utils.TimeUtils;
 
 /**
@@ -99,6 +105,20 @@ public final class MainActivity extends AppCompatActivity {
     private ShareLinkLayoutManager linkList;
 
     private static final int MY_PERMISSIONS_REQUEST_FINE_LOCATION = 123;
+
+    // PATCH (Stefan, 06.11.2026, Projekt Hauk_Watchdog):
+    private static final int MY_PERMISSIONS_REQUEST_BACKGROUND_LOCATION = 124;
+    private static final String PATCH_PREFS_NAME = "hauk_patch_prefs"; //NON-NLS
+    private static final String PATCH_PREF_BG_LOCATION_GEFRAGT = "bg_location_schon_gefragt"; //NON-NLS
+    private static final long PATCH_UI_REFRESH_INTERVALL_MS = 5000;
+    private final Handler patchUiRefreshHandler = new Handler(Looper.getMainLooper());
+    private final Runnable patchUiRefreshTask = new Runnable() {
+        @Override
+        public void run() {
+            aktualisierePatchAnzeige();
+            MainActivity.this.patchUiRefreshHandler.postDelayed(this, PATCH_UI_REFRESH_INTERVALL_MS);
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -173,6 +193,7 @@ public final class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         this.uiStopTask.setActivityDestroyed();
+        this.patchUiRefreshHandler.removeCallbacks(this.patchUiRefreshTask);
         super.onDestroy();
     }
 
@@ -183,6 +204,63 @@ public final class MainActivity extends AppCompatActivity {
         // Set app logo visibility.
         PreferenceManager prefs = new PreferenceManager(this);
         findViewById(R.id.imgLogo).setVisibility(prefs.get(Constants.PREF_HIDE_LOGO) ? View.GONE : View.VISIBLE);
+
+        // PATCH (Stefan, 06.11.2026, Projekt Hauk_Watchdog): Hintergrund-Standort-Berechtigung
+        // anbieten (vierte Option, analog MacroDroid) UND regelmaessige Aktualisierung der
+        // Intervall-/Server-Antwort-/Warn-Anzeige starten.
+        anfrageHintergrundStandortFallsNoetig();
+        aktualisierePatchAnzeige();
+        this.patchUiRefreshHandler.removeCallbacks(this.patchUiRefreshTask);
+        this.patchUiRefreshHandler.postDelayed(this.patchUiRefreshTask, PATCH_UI_REFRESH_INTERVALL_MS);
+    }
+
+    /**
+     * PATCH (Stefan, 06.11.2026, Projekt Hauk_Watchdog): Fragt EINMALIG (pro Geraet, nicht bei
+     * jedem App-Start erneut) die Hintergrund-Standort-Berechtigung an, falls die normale
+     * Standort-Berechtigung bereits erteilt ist, die Hintergrund-Berechtigung aber noch fehlt.
+     * Android verlangt diese Anfrage zwingend GETRENNT von der normalen Standort-Anfrage (siehe
+     * Android-Dokumentation zu ACCESS_BACKGROUND_LOCATION) - deshalb hier als separater,
+     * nachgelagerter Schritt und nicht zusammen mit der bestehenden Anfrage in
+     * PermissionRequestExecutionTask. Diese Berechtigung ist fuer die eigentliche
+     * Standortuebertragung NICHT erforderlich (der Foreground-Service deckt das bereits ab,
+     * siehe Issue #242-Korrektur) - sie wird nur angeboten, damit in den System-Einstellungen
+     * dieselbe vierte Option ("Immer zulassen") wie bei MacroDroid erscheint.
+     */
+    private void anfrageHintergrundStandortFallsNoetig() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return;
+        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return;
+        if (checkSelfPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED) return;
+
+        SharedPreferences patchPrefs = getSharedPreferences(PATCH_PREFS_NAME, Context.MODE_PRIVATE);
+        if (patchPrefs.getBoolean(PATCH_PREF_BG_LOCATION_GEFRAGT, false)) return;
+
+        Log.i("Frage einmalig die Hintergrund-Standort-Berechtigung an (patched, siehe Hauk-Watchdog-Projekt)"); //NON-NLS
+        patchPrefs.edit().putBoolean(PATCH_PREF_BG_LOCATION_GEFRAGT, true).apply();
+        ActivityCompat.requestPermissions(this, new String[] {
+                Manifest.permission.ACCESS_BACKGROUND_LOCATION
+        }, MY_PERMISSIONS_REQUEST_BACKGROUND_LOCATION);
+    }
+
+    /**
+     * PATCH (Stefan, 06.11.2026, Projekt Hauk_Watchdog): Aktualisiert die drei neuen Anzeigen auf
+     * dem Hauptbildschirm: eingestelltes Intervall, letzte Server-Antwort, und Warnhinweis, falls
+     * die Server-Antwort die erwartete Patch-Kennzeichnung vermissen liess.
+     */
+    private void aktualisierePatchAnzeige() {
+        PreferenceManager prefs = new PreferenceManager(this);
+        int intervallSekunden = prefs.get(Constants.PREF_INTERVAL);
+        ((TextView) findViewById(R.id.labelIntervalCur)).setText(getString(R.string.label_patch_interval_value, intervallSekunden));
+
+        String letzteAntwort = PatchStatus.letzteServerAntwort;
+        TextView lblLastResponse = findViewById(R.id.labelLastResponseCur);
+        if (letzteAntwort == null) {
+            lblLastResponse.setText(getString(R.string.label_patch_last_response_none));
+        } else {
+            long alterMs = System.currentTimeMillis() - PatchStatus.letzteServerAntwortZeit;
+            lblLastResponse.setText(getString(R.string.label_patch_last_response_value, letzteAntwort, alterMs / 1000));
+        }
+
+        findViewById(R.id.labelPatchWarning).setVisibility(PatchStatus.serverKennzeichnungVorhanden ? View.GONE : View.VISIBLE);
     }
 
     /**

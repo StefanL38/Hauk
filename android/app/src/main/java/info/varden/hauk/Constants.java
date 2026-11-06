@@ -119,6 +119,17 @@ public enum Constants {
     public static final String PACKET_PARAM_TIMESTAMP = "time";
     public static final String PACKET_PARAM_USERNAME = "usr";
 
+    // PATCH (Stefan, 06.11.2026, Projekt Hauk_Watchdog): Eigene Patch-Kennzeichnung, die bei
+    // JEDEM Standort-Update mitgeschickt wird (App -> Server) bzw. in der Server-Antwort
+    // erwartet wird (Server -> App). Dient NICHT der eigentlichen Standort-Funktion, sondern
+    // AUSSCHLIESSLICH dazu, zu erkennen, ob eine zukuenftige manuelle Aktualisierung der
+    // App und/oder des Servers versehentlich die eigenen Korrekturen (siehe GitHub-Issue
+    // #242) ueberschrieben/entfernt hat. Fehlt die Kennzeichnung auf einer Seite, war dort
+    // vermutlich (wieder) unpatchter Original-Code am Werk.
+    public static final String PACKET_PARAM_PATCH_MARKER = "pmrk";
+    public static final String PACKET_PARAM_SERVER_MARKER_WAR_WEG = "psrvmiss";
+    public static final String PATCH_MARKER_WERT = "stefanl38-hauk-patch-2026-11-06";
+
     // Packet OK response header. All valid packets start with this line.
     public static final String PACKET_RESPONSE_OK = "OK";
 

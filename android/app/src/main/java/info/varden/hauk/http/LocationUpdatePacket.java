@@ -15,6 +15,7 @@ import info.varden.hauk.http.parameter.LocationProvider;
 import info.varden.hauk.struct.Session;
 import info.varden.hauk.struct.Version;
 import info.varden.hauk.utils.Log;
+import info.varden.hauk.utils.PatchStatus;
 import info.varden.hauk.utils.TimeUtils;
 
 /**
@@ -47,6 +48,16 @@ public abstract class LocationUpdatePacket extends Packet {
     protected LocationUpdatePacket(Context ctx, Session session, Location location, LocationProvider accuracy) {
         super(ctx, session.getServerURL(), session.getConnectionParameters(), Constants.URL_PATH_POST_LOCATION);
         setParameter(Constants.PACKET_PARAM_SESSION_ID, session.getID());
+
+        // PATCH (Stefan, 06.11.2026, Projekt Hauk_Watchdog): Eigene Patch-Kennzeichnung bei
+        // JEDEM Standort-Update mitschicken (siehe Constants.PATCH_MARKER_WERT). Faellt die
+        // allerletzte Server-Antwort ohne diese Kennzeichnung auf, wird das zusaetzlich als
+        // eigenes Feld mitgeschickt, damit der Server es seinerseits erkennen und Stefan
+        // benachrichtigen kann (ueber alle drei Kanaele, siehe hauk_watchdog-Projekt).
+        setParameter(Constants.PACKET_PARAM_PATCH_MARKER, Constants.PATCH_MARKER_WERT);
+        if (!PatchStatus.serverKennzeichnungVorhanden) {
+            setParameter(Constants.PACKET_PARAM_SERVER_MARKER_WAR_WEG, "1");
+        }
 
         if (session.getDerivableE2EKey() == null) {
             // If not using end-to-end encryption, send parameters in plain text.
@@ -102,6 +113,23 @@ public abstract class LocationUpdatePacket extends Packet {
                     onShareListReceived(linkFormat, new String[0]);
                 }
             }
+
+            // PATCH (Stefan, 06.11.2026, Projekt Hauk_Watchdog): Vierte Zeile der Antwort
+            // (falls vorhanden) enthaelt die Patch-Kennzeichnung des Servers. Fehlt sie oder
+            // stimmt sie nicht, wurde der Server vermutlich (wieder) auf unpatchten
+            // Original-Code zurueckgesetzt. Ergebnis fuer den Hauptbildschirm merken.
+            boolean serverMarkerOk = data.length >= 4 && Constants.PATCH_MARKER_WERT.equals(data[3]);
+            PatchStatus.serverKennzeichnungVorhanden = serverMarkerOk;
+            if (!serverMarkerOk) {
+                Log.w("Server-Antwort enthielt NICHT die erwartete Patch-Kennzeichnung '%s' (erhalten: %s) - vermutlich wurde der Hauk-Server-Code (wieder) auf unpatchten Original-Code zurueckgesetzt (patched, siehe Hauk-Watchdog-Projekt)", Constants.PATCH_MARKER_WERT, data.length >= 4 ? data[3] : "<keine 4. Zeile>"); //NON-NLS
+            }
+            StringBuilder ganzeAntwort = new StringBuilder();
+            for (int i = 0; i < data.length; i++) {
+                if (i > 0) ganzeAntwort.append(" | ");
+                ganzeAntwort.append(data[i]);
+            }
+            PatchStatus.letzteServerAntwort = ganzeAntwort.toString();
+            PatchStatus.letzteServerAntwortZeit = System.currentTimeMillis();
         } else {
             // If the first line of the response is not "OK", an error of some sort has occurred and
             // should be displayed to the user.

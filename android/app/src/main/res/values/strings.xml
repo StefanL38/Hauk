@@ -20,6 +20,13 @@
     <string name="label_pin">Group PIN:</string>
     <string name="label_status">Status:</string>
         <string name="label_status_none">Location sharing inactive</string>
+    <!-- PATCH (Stefan, 06.11.2026, Projekt Hauk_Watchdog) -->
+    <string name="label_patch_interval">Intervall:</string>
+    <string name="label_patch_interval_value">%1$d Sekunden</string>
+    <string name="label_patch_last_response">Letzte Server-Antwort:</string>
+    <string name="label_patch_last_response_none">(noch keine)</string>
+    <string name="label_patch_last_response_value">%1$s\n(vor %2$d s)</string>
+    <string name="label_patch_server_warning">⚠️ Der Hauk-Server antwortet ohne die erwartete Patch-Kennzeichnung – vermutlich wurde der Server auf unpatchten Original-Code zurückgesetzt.</string>
         <string name="label_status_wait">Waiting for initial GNSS fix…</string>
         <string name="label_status_lost_gnss">Searching for location…</string>
         <string name="label_status_coarse">Waiting for high accuracy fix…</string>
