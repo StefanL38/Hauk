@@ -214,6 +214,23 @@ public abstract class SessionManager {
         // eine jederzeit aktuelle UI.
         if (pusher != null) {
             Log.d("Pusher is non-null (%s); service is already running in the background, leaving it untouched instead of stopping/relaunching it (patched, see Hauk-Watchdog project / Hauk GitHub issue #242)", pusher); //NON-NLS
+
+            // PATCH (Stefan, 07.11.2026, Projekt Hauk_Watchdog): Da der Dienst oben bewusst
+            // NICHT neu gestartet wird, weiss die NEUE MainActivity-Instanz sonst nie, dass er
+            // bereits erfolgreich Positionsdaten liefert - der Hauptbildschirm wuerde
+            // dauerhaft "Warte auf ersten GNSS-Fix" zeigen, obwohl die Uebertragung laengst
+            // funktioniert (Fund Stefan 07.11.2026). Erst "onStarted()" fuer den optischen
+            // Ausgangszustand, dann den tatsaechlichen, bereits bekannten Stand vom laufenden
+            // Dienst nachliefern.
+            for (GNSSStatusUpdateListener listener : this.upstreamUpdateHandlers) {
+                listener.onStarted();
+            }
+            LocationPushService laufend = LocationPushService.getAktiveInstanz();
+            if (laufend != null) {
+                laufend.statusEmpfaengerErgaenzenUndAktuellenStandAbspielen(new GNSSStatusUpdateTask(null));
+            } else {
+                Log.w("Pusher-Intent zeigt auf einen Dienst, aber keine laufende Instanz wurde gefunden - Status-Anzeige kann erst beim naechsten echten Ereignis synchronisiert werden (patched, siehe Hauk-Watchdog-Projekt)"); //NON-NLS
+            }
         } else {
             Log.d("Pusher is null, calling resumption prompter"); //NON-NLS
             this.resumable.tryResumeShare(new AutoResumptionPrompter(this, this.resumable, prompt));
@@ -513,6 +530,18 @@ public abstract class SessionManager {
 
         @Override
         public void onShareListReceived(String linkFormat, String[] shareIDs) {
+            // PATCH (Stefan, 07.11.2026, Projekt Hauk_Watchdog): Diese Instanz kann seit der
+            // Issue-#242-Korrektur auch MIT session=null erzeugt werden (siehe
+            // resumeShares()/statusEmpfaengerErgaenzenUndAktuellenStandAbspielen() - dort wird
+            // nur die Status-ANZEIGE nachtraeglich synchronisiert, ohne eine echte Sitzung zur
+            // Hand zu haben). Ohne diese Pruefung wuerde "new Share(this.session, ...)" weiter
+            // unten mit einer NullPointerException abbrechen, falls in genau diesem kurzen
+            // Zeitfenster eine Gruppen-Freigabe-Aufnahme vom Server gemeldet wird (seltener
+            // Grenzfall, aber besser kontrolliert abbrechen als abstuerzen).
+            if (this.session == null) {
+                Log.w("onShareListReceived() mit session=null aufgerufen (patched, siehe Hauk-Watchdog-Projekt) - kann neue Gruppen-Freigaben in diesem Zustand nicht verarbeiten, ueberspringe."); //NON-NLS
+                return;
+            }
             List<String> currentShares = Arrays.asList(shareIDs);
             for (int i = 0; i < currentShares.size(); i++) {
                 String shareID = currentShares.get(i);

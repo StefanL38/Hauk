@@ -92,10 +92,58 @@ public final class LocationPushService extends Service {
      */
     private boolean connected = true;
 
+    // PATCH (Stefan, 07.11.2026, Projekt Hauk_Watchdog): Statische Referenz auf die aktuell
+    // laufende Service-Instanz (falls vorhanden). Hintergrund: Seit der Issue-#242-Korrektur
+    // (siehe SessionManager.resumeShares()) wird dieser Dienst beim Neuerzeugen der
+    // MainActivity NICHT mehr gestoppt/neu gestartet, wenn er bereits laeuft. Dadurch bleibt
+    // "gnssActiveTask" fest an die Bildschirm-Instanz gebunden, die den Dienst ZULETZT
+    // tatsaechlich gestartet hat - eine neu erzeugte MainActivity erfaehrt sonst NIE, dass der
+    // Dienst schon laengst erfolgreich Positionsdaten liefert, und zeigt dauerhaft "Warte auf
+    // ersten GNSS-Fix" an, obwohl die Uebertragung laengst funktioniert (Fund Stefan,
+    // 07.11.2026). Diese statische Referenz erlaubt es resumeShares(), sich nachtraeglich
+    // SICHER (ohne die eigentliche Standortermittlung anzufassen) an den laufenden Dienst
+    // anzuhaengen, siehe statusEmpfaengerErgaenzenUndAktuellenStandAbspielen() unten.
+    @Nullable
+    private static volatile LocationPushService aktiveInstanz = null;
+
     @Override
     public void onCreate() {
         Log.d("Fetching location service"); //NON-NLS
         this.locMan = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+        LocationPushService.aktiveInstanz = this;
+    }
+
+    /**
+     * PATCH (Stefan, 07.11.2026, Projekt Hauk_Watchdog): Liefert die aktuell laufende
+     * Service-Instanz, oder null, falls der Dienst gerade nicht laeuft.
+     */
+    @Nullable
+    public static LocationPushService getAktiveInstanz() {
+        return LocationPushService.aktiveInstanz;
+    }
+
+    /**
+     * PATCH (Stefan, 07.11.2026, Projekt Hauk_Watchdog): Haengt einen ZUSAETZLICHEN
+     * GNSS-Status-Empfaenger an den bereits laufenden Dienst an (ohne listenFine/listenCoarse
+     * oder die Foreground-Notification anzufassen - das waere wieder der in Issue #242
+     * beschriebene Absturzpfad) UND liefert den bereits bekannten Stand SOFORT nach, statt auf
+     * das naechste echte Location-Update zu warten (das koennte je nach Intervall erst in
+     * mehreren Sekunden bis Minuten eintreffen). Der bisherige Empfaenger (z. B. die
+     * Foreground-Notification und die ALTE, mittlerweile verwaiste Bildschirm-Instanz) bleibt
+     * zusaetzlich bestehen und wird weiterhin benachrichtigt - bewusst additiv, nicht
+     * ersetzend, um dort nichts zu zerstoeren.
+     *
+     * @param neuerHandler Der zusaetzliche Empfaenger, typischerweise die aktuelle
+     *                     MainActivity-Bildschirm-Instanz.
+     */
+    public void statusEmpfaengerErgaenzenUndAktuellenStandAbspielen(GNSSActiveHandler neuerHandler) {
+        this.gnssActiveTask = new MultiTargetGNSSHandlerProxy(this.gnssActiveTask, neuerHandler);
+        if (this.hasRunCoarseTask) {
+            neuerHandler.onCoarseLocationReceived();
+        }
+        if (this.hasRunAccurateTask) {
+            neuerHandler.onAccurateLocationReceived();
+        }
     }
 
     @Override
@@ -188,6 +236,14 @@ public final class LocationPushService extends Service {
             Log.w("Service %s destroyed, but handler was already null - skipping removeCallbacksAndMessages (patched, see Hauk-Watchdog project / Hauk GitHub issue #242)", this); //NON-NLS
         }
         this.gnssActiveTask = new MultiTargetGNSSHandlerProxy();
+
+        // PATCH (Stefan, 07.11.2026, Projekt Hauk_Watchdog): Statische Referenz nur loeschen,
+        // wenn sie noch auf GENAU DIESE Instanz zeigt - verhindert, dass ein spaeter
+        // gestartetes, bereits laufendes NEUERES Service-Objekt durch das verzoegerte
+        // onDestroy() einer ALTEN Instanz versehentlich wieder auf null gesetzt wird.
+        if (LocationPushService.aktiveInstanz == this) {
+            LocationPushService.aktiveInstanz = null;
+        }
 
         Log.i("Stopping foreground service"); //NON-NLS
         stopForeground(STOP_FOREGROUND_REMOVE);
