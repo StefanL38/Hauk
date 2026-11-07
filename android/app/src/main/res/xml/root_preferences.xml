@@ -131,6 +131,23 @@
 
     </PreferenceCategory>
 
+    <!-- PATCH (Stefan, 07.11.2026, Projekt Hauk_Watchdog): Einstellungen verschluesselt auf dem
+         Hauk-Server sichern/wiederherstellen, damit eine Neuinstallation (z.B. nach einem
+         Debug-Signierschluessel-Wechsel) nicht mehr jedes Feld von Hand erfordert. -->
+    <PreferenceCategory app:title="@string/prefs_header_backup">
+
+        <Preference
+            app:key="dummy_sicherungErstellen"
+            app:title="@string/pref_sicherungErstellen_title"
+            app:summary="@string/pref_sicherungErstellen_summary" />
+
+        <Preference
+            app:key="dummy_sicherungWiederherstellen"
+            app:title="@string/pref_sicherungWiederherstellen_title"
+            app:summary="@string/pref_sicherungWiederherstellen_summary" />
+
+    </PreferenceCategory>
+
     <PreferenceCategory app:title="@string/prefs_header_about">
 
         <Preference

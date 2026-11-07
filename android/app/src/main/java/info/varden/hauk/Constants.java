@@ -97,6 +97,15 @@ public enum Constants {
     public static final String URL_PATH_POST_LOCATION = "api/post.php";
     public static final String URL_PATH_STOP_SHARING = "api/stop.php";
 
+    // PATCH (Stefan, 07.11.2026, Projekt Hauk_Watchdog): Einstellungs-Sicherung/-Wiederherstellung
+    // ueber den Hauk-Server (verschluesselt, Server kennt das Entschluesselungspasswort nie).
+    public static final String URL_PATH_SETTINGS_BACKUP = "api/einstellungen-sichern.php";
+    public static final String URL_PATH_SETTINGS_RESTORE = "api/einstellungen-abrufen.php";
+    public static final String PACKET_PARAM_SETTINGS_BLOB = "blob";
+    public static final int SETTINGS_BACKUP_PBKDF2_ITERATIONEN = 65536;
+    public static final int SETTINGS_BACKUP_SALT_LAENGE_BYTES = 32;
+    public static final int SETTINGS_BACKUP_IV_LAENGE_BYTES = 16;
+
     // Packet parameter keys.
     public static final String PACKET_PARAM_ACCURACY = "acc";
     public static final String PACKET_PARAM_ADOPTABLE = "ado";

@@ -176,6 +176,24 @@
         <string name="pref_hideLogo_on">Hide the Hauk logo from the app\'s main screen</string>
         <string name="pref_hideLogo_off">Show the Hauk logo at the top of the app\'s main screen</string>
 
+    <!-- PATCH (Stefan, 07.11.2026, Projekt Hauk_Watchdog): Einstellungen sichern/wiederherstellen -->
+    <string name="prefs_header_backup">Einstellungen sichern (Hauk-Watchdog-Patch)</string>
+    <string name="pref_sicherungErstellen_title">Einstellungen auf Server sichern</string>
+    <string name="pref_sicherungErstellen_summary">Verschlüsselt alle Einstellungen mit einem selbst gewählten Passwort und speichert sie auf dem Hauk-Server (der Server kennt das Passwort nie)</string>
+    <string name="pref_sicherungWiederherstellen_title">Einstellungen vom Server wiederherstellen</string>
+    <string name="pref_sicherungWiederherstellen_summary">Lädt eine zuvor gesicherte, verschlüsselte Kopie vom Hauk-Server und stellt sie nach Eingabe des Sicherungs-Passworts wieder her</string>
+    <string name="sicherung_passwort_dialog_titel_sichern">Sicherungs-Passwort festlegen</string>
+    <string name="sicherung_passwort_dialog_titel_wiederherstellen">Sicherungs-Passwort eingeben</string>
+    <string name="sicherung_passwort_dialog_hinweis">Dieses Passwort verschlüsselt die Sicherung. Es ist NICHT dasselbe wie dein Hauk-Server-Passwort und wird nirgends gespeichert – merke es dir gut.</string>
+    <string name="sicherung_ok_button">OK</string>
+    <string name="sicherung_abbrechen_button">Abbrechen</string>
+    <string name="sicherung_erfolg_gesichert">Einstellungen erfolgreich verschlüsselt auf dem Server gesichert.</string>
+    <string name="sicherung_erfolg_wiederhergestellt">Einstellungen erfolgreich wiederhergestellt. Bitte Einstellungsseite neu öffnen.</string>
+    <string name="sicherung_keine_vorhanden">Auf dem Server liegt noch keine gesicherte Kopie der Einstellungen vor.</string>
+    <string name="sicherung_falsches_passwort">Falsches Sicherungs-Passwort – Entschlüsselung fehlgeschlagen.</string>
+    <string name="sicherung_fehler_netzwerk">Verbindung zum Hauk-Server fehlgeschlagen: %1$s</string>
+    <string name="sicherung_fehler_verschluesselung">Verschlüsselung fehlgeschlagen: %1$s</string>
+
     <!-- About section -->
     <string name="prefs_header_about">About Hauk</string>
     <string name="about_version_title">App version</string>
